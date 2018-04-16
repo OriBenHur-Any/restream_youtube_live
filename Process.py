@@ -1,10 +1,19 @@
 import platform
 import os
-import sys
 import subprocess
+import sys
+import urllib3
 import time
-import urllib
-import time
+urllib3.disable_warnings()
+from shutil import copyfile
+
+try:
+  import requests
+except ImportError:
+  print ("\nError: requests package is not installed pleas run: sudo python -m pip install requests\n")
+  exit(1)
+
+import zipfile
 from tempfile import gettempdir
 
 def linux_distribution():
@@ -40,9 +49,9 @@ if get_os_info()['system'] == 'Windows':
 def check_pre_requirements(): 
   if not os.path.exists(bin_dir):
     os.makedirs(bin_dir)
-  pre_requirements = { "python":True, "youtube_dl":False, "ffmpeg":False}
+  pre_requirements = { "python":False, "youtube_dl":False, "ffmpeg":False}
   if not sys.version_info[0] > 2:
-    pre_requirements["python"] = False
+    pre_requirements["python"] = True
     if not isWindows:
       if not os.path.exists(os.path.join(bin_dir, "youtube-dl")):
         pre_requirements["youtube_dl"] = True
@@ -59,34 +68,47 @@ def check_pre_requirements():
         pre_requirements["ffmpeg"] = True
     return pre_requirements
        
-def reporthook(count, block_size, total_size):
-    global start_time
-    if count == 0:
-        start_time = time.time()
-        return
-    duration = time.time() - start_time
-    progress_size = int(count * block_size)
-    speed = int(progress_size / (1024 * duration))
-    percent = min(int(count*block_size*100/total_size),100)
-    sys.stdout.write("\r%d%%, %d MB, %d KB/s, %d seconds passed" %
-                    (percent, progress_size / (1024 * 1024), speed, duration))
-    sys.stdout.flush()
 
-def download_file(url, filename):
-    urllib.urlretrieve(url, filename, reporthook)
-
+def download_file(url, file_name):
+  # urllib.urlretrieve(url, filename, reporthook)
+  #wget.download(url,filename)
+  with open(file_name, "wb") as f:
+    start_time =time.clock()
+    print "Downloading %s" % os.path.basename(file_name)
+    response = requests.get(url, allow_redirects=True, stream=True)
+    total_length = response.headers.get('content-length')
+    if total_length is None: # no content length header
+        f.write(response.content)
+    else:
+        dl = 0
+        float_total_lenth = float(total_length)
+        int_total_length = int(total_length)
+        for data in response.iter_content(chunk_size=int_total_length/100):
+            dl += len(data) 
+            f.write(data)
+            done = int(50 * dl / int_total_length)
+            sys.stdout.write("\r[%s%s] Doloaded %.3fMB out of %.3fMB @ %.3fKBs" % ('=' * done, ' ' * (50 - done),float(float(dl)/1024/1024),  float(float_total_lenth/1024/1024), float(dl  / (1024 * (time.clock() - start_time)))))    
+            sys.stdout.flush()
+  f.close()
+  print "\ndone"
+  
 def download_ffmpeg():
   if not isWindows:
-    os.system('sudo apt install ffmpeg')
+    print "Downloading ffmpeg with apt:"
+    os.system('sudo apt install ffmpeg -y')
+    os.symlink("/usr/bin/ffmpeg",  os.path.join(bin_dir,"ffmpeg"))
   else:
-    download_file("https://storage.cloud.google.com/anyvision-images/ffmpeg.exe",os.path.join(bin_dir, "ffmpeg.exe"))
-
+    #subprocess.call(["C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",  "Start-BitsTransfer -Source 'https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip' -Destination {}".format(os.path.join(gettempdir(),"ffmpeg.zip"))])
+    download_file("https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip",os.path.join(gettempdir(), "ffmpeg.zip"))
+    zip_ref = zipfile.ZipFile(os.path.join(gettempdir(), "ffmpeg.zip"), 'r')
+    zip_ref.extractall(gettempdir())
+    zip_ref.close()
+    copyfile(os.path.join(gettempdir(), "ffmpeg-latest-win64-static\\bin\\ffmpeg.exe"),os.path.join(bin_dir, "ffmpeg.exe"))
 
 def download_youtubedl():
   if not isWindows:
     dlfile = os.path.join(bin_dir,"youtube-dl")
     try:
-      print "Downloading youtube-dl"
       download_file("https://yt-dl.org/downloads/latest/youtube-dl", dlfile)
       print os.linesep
     except Exception as e:
@@ -103,13 +125,14 @@ def download_youtubedl():
       raise Exception(str(e))
 
 def proccess_youtube(video_url):
+  print "Getting youtube stream..."
   cmd = youtubedl, "--list-formats", video_url
   if not isWindows:
     os.chmod(youtubedl, 509)
-  print "Getting youtube stream..."
   popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
   popen.wait()
   output = popen.stdout.readlines()
+  print "Fatching relevant stream..."
   best = str(output[-1]).replace("b'","").split(' ')[0]
   cmd = youtubedl ,"-f", best, "-g", video_url
   popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -117,15 +140,20 @@ def proccess_youtube(video_url):
   output = popen.stdout.read()
   output = str(output).replace("b'","").replace("\\n'","")
   file_name = "{}.m3u8".format(os.path.join(gettempdir(),video_url.split("=")[1]))
-  download_file(output,file_name)
+  if os.path.exists(file_name):
+    os.remove(file_name)
+  download_file(output, file_name)
   print os.linesep
 
   if not isWindows:
     ffmpeg = os.path.join(bin_dir, "ffmpeg")
   else:
     ffmpeg = os.path.join(bin_dir, "ffmpeg.exe")
-
-  ffmpeg_cmd = "{} -y -re -i {} -maxrate 15M -bufsize 240M -vcodec libx264 -crf 20 -preset ultrafast -an -f flv -muxdelay 0.05 {}".format(ffmpeg, file_name, sys.argv[2])
+  if isWindows:
+     protocol_whitelist = " -protocol_whitelist \"file,http,https,tcp,tls\" "
+  else:
+    protocol_whitelist = " "
+  ffmpeg_cmd = "{} -y -re{}-i {} -maxrate 15M -bufsize 240M -vcodec libx264 -crf 20 -preset ultrafast -an -f flv -muxdelay 0.05 {}".format(ffmpeg, protocol_whitelist, file_name, sys.argv[2])
   os.system(ffmpeg_cmd)
 
 
@@ -141,5 +169,5 @@ if __name__== "__main__":
     
     proccess_youtube(sys.argv[1])
   else:
-    print os.linesep+"""Usege:python Main.py <youtube_url> <rtmp_destnation_server>
-Exp: python Main.py https://www.youtube.com/watch?v=y7e-GC6oGhg rtmp://demo.site.com/live/stream"""
+    print os.linesep+"""Usege:python {} <youtube_url> <rtmp_destnation_server>
+Exp: python {} https://www.youtube.com/watch?v=y7e-GC6oGhg rtmp://demo.site.com/live/stream""".format(os.path.basename(sys.argv[0]),os.path.basename(sys.argv[0]))
