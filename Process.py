@@ -141,8 +141,6 @@ def proccess_youtube(video_url):
   output = popen.stdout.read()
   output = str(output).replace("b'","")
   output = output.replace("\n","")
-
-  print os.linesep
   ffmpeg_cmd = "{} -hide_banner -re{}-i {} -c copy -an -bufsize 4M -crf 20 -preset ultrafast -f flv -muxdelay 0.05 {}".format(ffmpeg, protocol_whitelist, output, sys.argv[2])
   os.system(ffmpeg_cmd)
 
