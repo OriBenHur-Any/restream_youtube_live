@@ -40,31 +40,34 @@ def get_os_info():
 bin_dir = os.path.join(os.getcwd(),"bin")
 isWindows = False
 youtubedl = os.path.join(bin_dir,"youtube-dl")
+ffmpeg = os.path.join(bin_dir, "ffmpeg")
+protocol_whitelist = " "
 if get_os_info()['system'] == 'Windows':
   isWindows = True
   youtubedl = os.path.join(bin_dir,"youtube-dl.exe")
+  ffmpeg = os.path.join(bin_dir, "ffmpeg.exe")
+  protocol_whitelist = " -protocol_whitelist \"file,http,https,tcp,tls\" "
 
 
 
 def check_pre_requirements(): 
   if not os.path.exists(bin_dir):
     os.makedirs(bin_dir)
-  pre_requirements = { "python":False, "youtube_dl":False, "ffmpeg":False}
+  pre_requirements = { "python":True, "youtube_dl":False, "ffmpeg":False}
   if not sys.version_info[0] > 2:
-    pre_requirements["python"] = True
+    pre_requirements["python"] = False
     if not isWindows:
-      if not os.path.exists(os.path.join(bin_dir, "youtube-dl")):
+      if not os.path.exists(youtubedl):
         pre_requirements["youtube_dl"] = True
       if not os.path.exists("/usr/bin/ffmpeg"):
         pre_requirements["ffmpeg"] = True
       else:
-        if not os.path.exists(os.path.join(format(bin_dir),'ffmpeg')):
-          os.symlink("/usr/bin/ffmpeg",  os.path.join(bin_dir,"ffmpeg"))
-          # os.system('ln -s {} {}'.format("/usr/bin/ffmpeg", os.path.join(bin_dir,"ffmpeg")))
+        if not os.path.exists(ffmpeg):
+          os.symlink("/usr/bin/ffmpeg", ffmpeg)
     else:
-      if not os.path.exists(os.path.join(bin_dir, "youtube-dl.exe")):
+      if not os.path.exists(youtubedl):
         pre_requirements["youtube_dl"] = True
-      if not os.path.exists(os.path.join(bin_dir, "ffmpeg.exe")):
+      if not os.path.exists(ffmpeg):
         pre_requirements["ffmpeg"] = True
     return pre_requirements
        
@@ -96,29 +99,29 @@ def download_ffmpeg():
   if not isWindows:
     print "Downloading ffmpeg with apt:"
     os.system('sudo apt install ffmpeg -y')
-    os.symlink("/usr/bin/ffmpeg",  os.path.join(bin_dir,"ffmpeg"))
+    os.symlink("/usr/bin/ffmpeg", ffmpeg)
   else:
     #subprocess.call(["C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",  "Start-BitsTransfer -Source 'https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip' -Destination {}".format(os.path.join(gettempdir(),"ffmpeg.zip"))])
     download_file("https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip",os.path.join(gettempdir(), "ffmpeg.zip"))
     zip_ref = zipfile.ZipFile(os.path.join(gettempdir(), "ffmpeg.zip"), 'r')
     zip_ref.extractall(gettempdir())
     zip_ref.close()
-    copyfile(os.path.join(gettempdir(), "ffmpeg-latest-win64-static\\bin\\ffmpeg.exe"),os.path.join(bin_dir, "ffmpeg.exe"))
+    copyfile(os.path.join(gettempdir(), "ffmpeg-latest-win64-static\\bin\\ffmpeg.exe"),ffmpeg)
 
 def download_youtubedl():
   if not isWindows:
     dlfile = os.path.join(bin_dir,"youtube-dl")
     try:
-      download_file("https://yt-dl.org/downloads/latest/youtube-dl", dlfile)
+      download_file("https://yt-dl.org/downloads/latest/youtube-dl", youtubedl)
+      os.chmod(youtubedl, 509)
       print os.linesep
     except Exception as e:
       os.remove(dlfile)
       raise Exception(str(e))
   else:
-    dlfile = os.path.join(bin_dir,"youtube-dl.exe")
     try:
       print "Downloading youtube-dl.exe"
-      download_file("https://yt-dl.org/downloads/latest/youtube-dl.exe", dlfile)
+      download_file("https://yt-dl.org/downloads/latest/youtube-dl.exe", youtubedl)
       print os.linesep
     except Exception as e:
       os.remove(dlfile)
@@ -126,9 +129,7 @@ def download_youtubedl():
 
 def proccess_youtube(video_url):
   print "Getting youtube stream..."
-  cmd = youtubedl, "--list-formats", video_url
-  if not isWindows:
-    os.chmod(youtubedl, 509)
+  cmd = youtubedl, "--list-formats", video_url    
   popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
   popen.wait()
   output = popen.stdout.readlines()
@@ -138,22 +139,11 @@ def proccess_youtube(video_url):
   popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
   popen.wait()
   output = popen.stdout.read()
-  output = str(output).replace("b'","").replace("\\n'","")
-  file_name = "{}.m3u8".format(os.path.join(gettempdir(),video_url.split("=")[1]))
-  if os.path.exists(file_name):
-    os.remove(file_name)
-  download_file(output, file_name)
-  print os.linesep
+  output = str(output).replace("b'","")
+  output = output.replace("\n","")
 
-  if not isWindows:
-    ffmpeg = os.path.join(bin_dir, "ffmpeg")
-  else:
-    ffmpeg = os.path.join(bin_dir, "ffmpeg.exe")
-  if isWindows:
-     protocol_whitelist = " -protocol_whitelist \"file,http,https,tcp,tls\" "
-  else:
-    protocol_whitelist = " "
-  ffmpeg_cmd = "{} -y -re{}-i {} -maxrate 15M -bufsize 240M -vcodec libx264 -crf 20 -preset ultrafast -an -f flv -muxdelay 0.05 {}".format(ffmpeg, protocol_whitelist, file_name, sys.argv[2])
+  print os.linesep
+  ffmpeg_cmd = "{} -hide_banner -re{}-i {} -c copy -an -bufsize 4M -crf 20 -preset ultrafast -f flv -muxdelay 0.05 {}".format(ffmpeg, protocol_whitelist, output, sys.argv[2])
   os.system(ffmpeg_cmd)
 
 
