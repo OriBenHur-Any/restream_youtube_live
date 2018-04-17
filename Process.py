@@ -120,7 +120,6 @@ def download_youtubedl():
       raise Exception(str(e))
   else:
     try:
-      print "Downloading youtube-dl.exe"
       download_file("https://yt-dl.org/downloads/latest/youtube-dl.exe", youtubedl)
       print os.linesep
     except Exception as e:
