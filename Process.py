@@ -110,20 +110,19 @@ def download_ffmpeg():
 
 def download_youtubedl():
   if not isWindows:
-    dlfile = os.path.join(bin_dir,"youtube-dl")
     try:
       download_file("https://yt-dl.org/downloads/latest/youtube-dl", youtubedl)
       os.chmod(youtubedl, 509)
       print os.linesep
     except Exception as e:
-      os.remove(dlfile)
+      os.remove(youtubedl)
       raise Exception(str(e))
   else:
     try:
       download_file("https://yt-dl.org/downloads/latest/youtube-dl.exe", youtubedl)
       print os.linesep
     except Exception as e:
-      os.remove(dlfile)
+      os.remove(youtubedl)
       raise Exception(str(e))
 
 def proccess_youtube(video_url):
