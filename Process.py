@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import platform
 import os
 import subprocess
@@ -6,13 +8,6 @@ import urllib3
 import time
 urllib3.disable_warnings()
 from shutil import copyfile
-
-try:
-  import requests
-except ImportError:
-  print ("\nError: requests package is not installed pleas run: sudo python -m pip install requests\n")
-  exit(1)
-
 import zipfile
 from tempfile import gettempdir
 
@@ -49,12 +44,20 @@ if get_os_info()['system'] == 'Windows':
   protocol_whitelist = " -protocol_whitelist \"file,http,https,tcp,tls\" "
 
 
+try:
+  import requests
+except ImportError:
+  if isWindows:
+    print ("\nError: requests package is not installed pleas run: python -m pip install requests\n")
+  else:
+    print ("\nError: requests package is not installed pleas run: sudo python -m pip install requests\n")
+    exit(1)
 
 def check_pre_requirements(): 
   if not os.path.exists(bin_dir):
     os.makedirs(bin_dir)
   pre_requirements = { "python":True, "youtube_dl":False, "ffmpeg":False}
-  if not sys.version_info[0] > 2:
+  if sys.version_info[0] >= 2:
     pre_requirements["python"] = False
     if not isWindows:
       if not os.path.exists(youtubedl):
@@ -69,7 +72,7 @@ def check_pre_requirements():
         pre_requirements["youtube_dl"] = True
       if not os.path.exists(ffmpeg):
         pre_requirements["ffmpeg"] = True
-    return pre_requirements
+  return pre_requirements
        
 
 def download_file(url, file_name):
@@ -125,26 +128,34 @@ def download_youtubedl():
       os.remove(youtubedl)
       raise Exception(str(e))
 
-def proccess_youtube(video_url):
-  print "Getting youtube stream..."
-  cmd = youtubedl, "--list-formats", video_url    
-  popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-  popen.wait()
-  output = popen.stdout.readlines()
-  print "Fatching relevant stream..."
-  best = str(output[-1]).replace("b'","").split(' ')[0]
-  cmd = youtubedl ,"-f", best, "-g", video_url
-  popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-  popen.wait()
-  output = popen.stdout.read()
-  output = str(output).replace("b'","")
-  output = output.replace("\n","")
-  ffmpeg_cmd = "{} -hide_banner -re{}-i {} -c copy -an -bufsize 4M -crf 20 -preset ultrafast -f flv -muxdelay 0.05 {}".format(ffmpeg, protocol_whitelist, output, sys.argv[2])
-  os.system(ffmpeg_cmd)
-
+def proccess_youtube(video_url, rtmp_server, loglevel):
+  try:
+    print "Getting youtube stream..."
+    cmd = youtubedl, "--list-formats", video_url    
+    popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    popen.wait()
+    output = popen.stdout.readlines()
+    print "Fatching relevant stream..."
+    best = str(output[-1]).replace("b'","").split(' ')[0]
+    cmd = youtubedl ,"-f", best, "-g", video_url
+    popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    popen.wait()
+    output = popen.stdout.read()
+    output = str(output).replace("b'","").replace("\n","")
+    ffmpeg_cmd = "{} -hide_banner -loglevel {} -re{}-i {} -c copy -an -bufsize 4M -crf 20 -preset ultrafast -f flv -muxdelay 0.05 {}".format(ffmpeg, loglevel, protocol_whitelist, output, rtmp_server)
+    os.system(ffmpeg_cmd)
+  except Exception as e:
+    print str(e.message)
 
 if __name__== "__main__":
-  if len(sys.argv) == 3:
+  if len(sys.argv) >= 3:
+    Youtube_url = sys.argv[1]
+    rtmp_server = sys.argv[2]
+    loglevel = "32"
+    try:
+      loglevel = sys.argv[3]
+    except:
+      pass
     pre_requirements = check_pre_requirements()
     if pre_requirements["python"]:
       raise Exception("Python 2 version is required.")
@@ -153,7 +164,7 @@ if __name__== "__main__":
     if pre_requirements["ffmpeg"]:
       download_ffmpeg()
     
-    proccess_youtube(sys.argv[1])
+    proccess_youtube(Youtube_url, rtmp_server, loglevel)
   else:
     print os.linesep+"""Usege:python {} <youtube_url> <rtmp_destnation_server>
 Exp: python {} https://www.youtube.com/watch?v=y7e-GC6oGhg rtmp://demo.site.com/live/stream""".format(os.path.basename(sys.argv[0]),os.path.basename(sys.argv[0]))
