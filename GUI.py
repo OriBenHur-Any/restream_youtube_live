@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+try:
+    # Python2
+    from Tkinter import *
+    import Tkinter.scrolledtext as tkscrolled
+except ImportError:
+    # Python3
+    from tkinter import *
+    import tkinter.scrolledtext as tkscrolled
 
 import platform
 import os
@@ -48,7 +56,8 @@ try:
     import requests
 except ImportError:
     if isWindows:
-        print ("\nError: requests package is not installed pleas run: python -m pip install requests\n")
+        print (
+            "\nError: requests package is not installed pleas run: python -m pip install requests\n")
     else:
         print ("\nError: requests package is not installed pleas run: sudo python -m pip install requests\n")
         exit(1)
@@ -105,7 +114,8 @@ def download_file(url, file_name):
                 f.write(data)
                 done = int(50 * dl / int_total_length)
                 sys.stdout.write("\r[%s%s] Doloaded %.3fMB out of %.3fMB @ %.3fKBs" % (
-                    '=' * done, ' ' * (50 - done), float(float(dl) / 1024 / 1024),
+                    '=' * done, ' ' *
+                    (50 - done), float(float(dl) / 1024 / 1024),
                     float(float_total_length / 1024 / 1024),
                     float(dl / (1024 * (time.clock() - start_time)))))
                 sys.stdout.flush()
@@ -116,27 +126,30 @@ def download_file(url, file_name):
 def download_ffmpeg():
     if not isWindows:
         try:
-            download_file("https://storage.googleapis.com/any-uploads/ffmpeg", ffmpeg)
+            download_file(
+                "https://storage.googleapis.com/any-uploads/ffmpeg", ffmpeg)
             os.chmod(ffmpeg, 509)
             print os.linesep
         except Exception as e:
             os.remove(youtubedl)
             raise Exception(str(e))
 
-
     else:
         download_file("https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-latest-win64-static.zip",
                       os.path.join(gettempdir(), "ffmpeg.zip"))
-        zip_ref = zipfile.ZipFile(os.path.join(gettempdir(), "ffmpeg.zip"), 'r')
+        zip_ref = zipfile.ZipFile(os.path.join(
+            gettempdir(), "ffmpeg.zip"), 'r')
         zip_ref.extractall(gettempdir())
         zip_ref.close()
-        copyfile(os.path.join(gettempdir(), "ffmpeg-latest-win64-static\\bin\\ffmpeg.exe"), ffmpeg)
+        copyfile(os.path.join(gettempdir(),
+                              "ffmpeg-latest-win64-static\\bin\\ffmpeg.exe"), ffmpeg)
 
 
 def download_youtubedl():
     if not isWindows:
         try:
-            download_file("https://yt-dl.org/downloads/latest/youtube-dl", youtubedl)
+            download_file(
+                "https://yt-dl.org/downloads/latest/youtube-dl", youtubedl)
             os.chmod(youtubedl, 509)
             print os.linesep
         except Exception as e:
@@ -144,7 +157,8 @@ def download_youtubedl():
             raise Exception(str(e))
     else:
         try:
-            download_file("https://yt-dl.org/downloads/latest/youtube-dl.exe", youtubedl)
+            download_file(
+                "https://yt-dl.org/downloads/latest/youtube-dl.exe", youtubedl)
             print os.linesep
         except Exception as e:
             os.remove(youtubedl)
@@ -155,6 +169,7 @@ def process_youtube(video_url, server, log_level):
     try:
         print "Getting youtube stream..."
         cmd = youtubedl, "--list-formats", video_url
+        sys.stdout = StdoutRedirector(t)
         popen = subprocess.Popen(cmd, stdout=subprocess.PIPE)
         popen.wait()
         output = popen.stdout.readlines()
@@ -172,11 +187,53 @@ def process_youtube(video_url, server, log_level):
     except Exception as e:
         print str(e.message)
 
+root = Tk()
 
-if __name__ == "__main__":
-    if len(sys.argv) >= 3:
-        youtube_url = sys.argv[1]
-        rtmp_server = sys.argv[2]
+w = 530
+h = 300
+x = 500
+y = 500
+root.geometry("%dx%d+%d+%d" % (w, h, x, y))
+#root.resizable(0, 0)
+top = Frame(root)                       # Create frame to hold entrys
+bottom = Frame(root)                    # Create frame to hold button
+bottom2 = Frame(root)                   # Create frame to hold log window
+top.pack()                              # Pack top frame
+bottom2.pack()                          # pack bottom2 frame
+bottom.pack(side=RIGHT, anchor="sw")    # Pack bottom frame
+
+
+l1 = Label(top, text="Youtube URL:")
+l1.pack(side=LEFT)
+e1 = Entry(top)
+e1.pack(side=LEFT)
+l2 = Label(top, text="Remote System:")
+l2.pack(side=LEFT)
+e2 = Entry(top)
+e2.pack(side=LEFT)
+
+# l = Label(root)
+
+t = tkscrolled.ScrolledText(bottom2, state='disabled', width=75, height=16)
+t.pack()
+
+old_stdout = sys.stdout
+class StdoutRedirector(object):
+    def __init__(self, text_area):
+        self.text_area = text_area
+
+    def write(self, str):
+        self.text_area.insert(END, str)
+        self.text_area.see(END)
+
+def callback():
+    t.delete("1.0", "end")
+    sys.stdout = StdoutRedirector(t)
+    t.configure(state='normal')
+    if (e1.get() and e2.get()):
+
+        youtube_url = e1.get()
+        rtmp_server = e2.get()
         loglevel = "32"
         try:
             loglevel = sys.argv[3]
@@ -192,6 +249,14 @@ if __name__ == "__main__":
         # print sys.argv[1], sys.argv[2]
         process_youtube(youtube_url, rtmp_server, loglevel)
     else:
-        print os.linesep + """Usage: python {} <youtube_url> <rtmp_destination_server>
+        t.insert(END, """Usage: python {} <youtube_url> <rtmp_destination_server>
 Exp: python {} https://www.youtube.com/watch?v=y7e-GC6oGhg rtmp://demo.site.com/live/stream""".format(
-            os.path.basename(sys.argv[0]), os.path.basename(sys.argv[0]))
+            os.path.basename(sys.argv[0]), os.path.basename(sys.argv[0])))
+    t.configure(state='disabled')
+    t.see(END)
+
+
+b = Button(bottom, text="OK", command=callback)
+b.pack(side=RIGHT)
+
+root.mainloop()
